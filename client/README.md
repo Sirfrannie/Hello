@@ -44,3 +44,16 @@ You don’t have to ever use `eject`. The curated feature set is suitable for sm
 You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
 
 To learn React, check out the [React documentation](https://reactjs.org/).
+
+
+rm -rf node_modules/.cache .eslintcache. ล้างแคส
+
+
+server 
+รับ multipartform data
+cd server
+npm i multer
+npm i -D @types/multer
+
+สร้างโฟเดอร์อัปโหลดครั้งเดียว 
+mkdir -p server/src/uploads

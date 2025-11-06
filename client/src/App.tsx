@@ -1,34 +1,39 @@
-import React, {useState, useEffect} from 'react';
-import logo from './logo.svg';
-import './App.css';
-// import Home from 'pages/Home';
-//import Link from 'react-router-dom';
+import React from "react";
+import "./App.css";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-interface User {
-    id: number;
-    name: string;
-};
-function App() {
+// ===== Pages =====
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import Shop from "./pages/Shop";
+import ProtectedRoute from "./pages/ProtectedRoute";
+
+export default function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-        <a href="./pages/Home"> Click </a>
-      </header>
+    <BrowserRouter>
+      <Routes>
+        {/* เข้าเว็บครั้งแรก → ส่งไปหน้า Login */}
+        <Route path="/" element={<Navigate to="/login" replace />} />
 
-    </div>
+        {/* หน้า Login */}
+        <Route path="/login" element={<Login />} />
+
+        {/* หน้า Register */}
+        <Route path="/register" element={<Register />} />
+
+        {/* หน้า Shop (ต้องมี token ถึงเข้าได้) */}
+        <Route
+          path="/shop"
+          element={
+            <ProtectedRoute>
+              <Shop />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ถ้า path ไม่ตรงกับที่กำหนด → redirect กลับ /login */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
-
-export default App;
