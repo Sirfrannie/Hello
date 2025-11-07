@@ -1,6 +1,9 @@
 import React from "react";
 import "./App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import Cart from "./pages/Cart";
+import Checkout from "./pages/Checkout";
+import Orders from "./pages/Orders";
 
 // ===== Pages =====
 import Login from "./pages/Login";
@@ -30,10 +33,40 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+        path="/cart"
+        element={
+        <ProtectedRoute>
+      <Cart />
+    </ProtectedRoute>
+  }
+/>
+        <Route
+  path="/checkout"
+  element={
+    <ProtectedRoute>
+      <Checkout />
+    </ProtectedRoute>
+  }
+/>
+<Route
+  path="/orders"
+  element={
+    <ProtectedRoute>
+      <Orders />
+    </ProtectedRoute>
+  }
+/>
 
         {/* ถ้า path ไม่ตรงกับที่กำหนด → redirect กลับ /login */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
+    
   );
+  
 }
+
+
+
+

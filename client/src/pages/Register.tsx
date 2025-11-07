@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import "../App.css";
 
+
 const API_URL =
   process.env.REACT_APP_API_URL?.replace(/\/+$/, "") || "http://localhost:3001";
 
@@ -64,10 +65,11 @@ export default function Register() {
       fd.append("password",  password);
       if (file) fd.append("avatar", file);
 
-      const res = await fetch(`${API_URL}/auth/register`, {
-        method: "POST",
-        body: fd, // multipart/form-data
-      });
+    const res = await fetch(`${API_URL}/auth/register`, { method: "POST", body: fd });
+    const result = await res.json();
+    localStorage.setItem("user", JSON.stringify(result.user)); 
+
+    
 
       if (!res.ok) {
         const text = await res.text().catch(() => "");

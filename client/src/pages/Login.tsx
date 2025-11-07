@@ -32,6 +32,7 @@ export default function Login() {
 
       const payload = await res.json();
       if (payload?.token) localStorage.setItem("token", payload.token);
+      localStorage.setItem("user", JSON.stringify(payload.user));
 
       nav("/shop");
     } catch (e: any) {
