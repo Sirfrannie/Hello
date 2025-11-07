@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
 import Orders from "./pages/Orders";
+import AdminDashboard from "./pages/AdminDashboard"; 
 
 // ===== Pages =====
 import Login from "./pages/Login";
@@ -11,20 +12,25 @@ import Register from "./pages/Register";
 import Shop from "./pages/Shop";
 import ProtectedRoute from "./pages/ProtectedRoute";
 
+function AdminOnly({ children }: { children: React.ReactNode }) {
+  try {
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    if (!user?.token) return <Navigate to="/login" replace />;
+    if (!user?.isAdmin) return <Navigate to="/shop" replace />;
+    return <>{children}</>;
+  } catch {
+    return <Navigate to="/login" replace />;
+  }
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* เข้าเว็บครั้งแรก → ส่งไปหน้า Login */}
         <Route path="/" element={<Navigate to="/login" replace />} />
-
-        {/* หน้า Login */}
         <Route path="/login" element={<Login />} />
-
-        {/* หน้า Register */}
         <Route path="/register" element={<Register />} />
 
-        {/* หน้า Shop (ต้องมี token ถึงเข้าได้) */}
         <Route
           path="/shop"
           element={
@@ -34,39 +40,46 @@ export default function App() {
           }
         />
         <Route
-        path="/cart"
-        element={
-        <ProtectedRoute>
-      <Cart />
-    </ProtectedRoute>
-  }
-/>
+          path="/cart"
+          element={
+            <ProtectedRoute>
+              <Cart />
+            </ProtectedRoute>
+          }
+        />
         <Route
-  path="/checkout"
-  element={
-    <ProtectedRoute>
-      <Checkout />
-    </ProtectedRoute>
-  }
-/>
-<Route
-  path="/orders"
-  element={
-    <ProtectedRoute>
-      <Orders />
-    </ProtectedRoute>
-  }
-/>
+          path="/checkout"
+          element={
+            <ProtectedRoute>
+              <Checkout />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/orders"
+          element={
+            <ProtectedRoute>
+              <Orders />
+            </ProtectedRoute>
+          }
+        />
 
-        {/* ถ้า path ไม่ตรงกับที่กำหนด → redirect กลับ /login */}
+        
+        <Route
+          path="/Admin"
+          element={
+            <AdminOnly>
+              <AdminDashboard />
+            </AdminOnly>
+          }
+        />
+
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
-    
   );
-  
 }
-
+  
 
 
 

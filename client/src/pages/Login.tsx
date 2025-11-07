@@ -5,6 +5,11 @@ import "../App.css";
 const API_URL =
   process.env.REACT_APP_API_URL?.replace(/\/+$/, "") || "http://localhost:3001";
 
+const ADMIN_EMAILS =
+  (process.env.REACT_APP_ADMIN_EMAILS || "Admin@test.com")
+    .split(",")
+    .map((s) => s.trim().toLowerCase());
+
 export default function Login() {
   const nav = useNavigate();
 
@@ -25,16 +30,34 @@ export default function Login() {
         body: JSON.stringify({ email, password }),
       });
 
+      const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(text || `Login failed (${res.status})`);
+        const msg = payload?.error || `Login failed (${res.status})`;
+        throw new Error(msg);
       }
 
-      const payload = await res.json();
-      if (payload?.token) localStorage.setItem("token", payload.token);
-      localStorage.setItem("user", JSON.stringify(payload.user));
+      // user + token จาก server
+      const userFromServer = payload?.user || {};
+      const token = payload?.token || "";
 
-      nav("/shop");
+      // ตัดสินว่าเป็นแอดมินไหม (role=admin หรืออยู่ใน allowlist)
+      const emailLower = String(userFromServer.email || "").toLowerCase();
+      const isAdmin =
+        userFromServer.role === "admin" || ADMIN_EMAILS.includes(emailLower);
+
+      // เก็บลง localStorage
+      localStorage.setItem(
+        "user",
+        JSON.stringify({ ...userFromServer, token, isAdmin })
+      );
+      localStorage.setItem("token", token);
+
+      // เส้นทางหลังล็อกอิน
+      if (isAdmin) {
+        nav("/admin"); // ✅ ใช้ตัวพิมพ์เล็กให้ตรงกับ route
+      } else {
+        nav("/shop");
+      }
     } catch (e: any) {
       setErr(e?.message ?? "ไม่สามารถเข้าสู่ระบบได้");
     } finally {
@@ -49,14 +72,22 @@ export default function Login() {
           <div className="brand-row">
             <div className="brand-mark">
               <div className="circle" />
-              <div className="word">SCHOOL OF <b>SCIENCE</b></div>
+              <div className="word">
+                SCHOOL OF <b>SCIENCE</b>
+              </div>
             </div>
             <div className="kmitl">KMITL • FIGHT TOGETHER</div>
           </div>
 
           <div className="cart-hero">
             <svg viewBox="0 0 256 160" className="cart-svg" aria-hidden>
-              <g stroke="#e4b54e" strokeWidth="10" fill="none" strokeLinecap="round" strokeLinejoin="round">
+              <g
+                stroke="#e4b54e"
+                strokeWidth="10"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M12 26h40l18 88h118l16-64H64" />
                 <circle cx="88" cy="138" r="12" fill="#e4b54e" />
                 <circle cx="168" cy="138" r="12" fill="#e4b54e" />
@@ -105,7 +136,11 @@ export default function Login() {
                     {showPw ? "ซ่อน" : "แสดง"}
                   </button>
                 </div>
-                <a className="forgot" href="#" onClick={(e) => e.preventDefault()}>
+                <a
+                  className="forgot"
+                  href="#"
+                  onClick={(e) => e.preventDefault()}
+                >
                   ลืมรหัสผ่าน
                 </a>
               </label>
@@ -114,7 +149,6 @@ export default function Login() {
                 {loading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
               </button>
 
-              
               <div className="signup-row">
                 <Link to="/register">สร้างบัญชี</Link>
               </div>

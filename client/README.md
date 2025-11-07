@@ -57,3 +57,7 @@ npm i -D @types/multer
 
 สร้างโฟเดอร์อัปโหลดครั้งเดียว 
 mkdir -p server/src/uploads
+
+
+rm -rf dist build .turbo .cache
+

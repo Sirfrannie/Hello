@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../App.css";
 
+const API_URL =
+  process.env.REACT_APP_API_URL?.replace(/\/+$/, "") || "http://localhost:3001";
+
 type Product = {
   id: number;
   name: string;
@@ -25,7 +28,31 @@ function clearCart() {
   localStorage.removeItem("cart");
 }
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:3001";
+function genOrderCode() {
+  // ตัวอย่าง: ORD-25K7F9
+  const part = Date.now().toString(36).toUpperCase().slice(-6);
+  return `ORD-${part}`;
+}
+
+/** หักสต็อกในแค็ตตาล็อกฝั่ง client (ที่แอดมินจัดการไว้ใน localStorage) */
+function deductStockFromCatalog(items: { id: number; qty: number }[]) {
+  const KEY = "catalog";
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return;
+    const list = JSON.parse(raw) as any[];
+    const want = new Map<number, number>();
+    for (const it of items) want.set(it.id, (want.get(it.id) || 0) + it.qty);
+    const next = list.map((p) =>
+      want.has(p.id)
+        ? { ...p, stock: Math.max(0, Number(p.stock || 0) - (want.get(p.id) || 0)) }
+        : p
+    );
+    localStorage.setItem(KEY, JSON.stringify(next));
+  } catch {
+    /* no-op */
+  }
+}
 
 export default function Checkout() {
   const nav = useNavigate();
@@ -56,8 +83,9 @@ export default function Checkout() {
       alert("ตะกร้าว่าง กรุณาเลือกสินค้า");
       nav("/shop");
       return;
+      
     }
-
+    
     const userRaw = localStorage.getItem("user");
     const user = userRaw ? JSON.parse(userRaw) : null;
     if (!user?.email) {
@@ -68,7 +96,7 @@ export default function Checkout() {
 
     setProcessing(true);
     try {
-      const body = {
+      const payload = {
         email: user.email,
         method,
         subtotal,
@@ -80,26 +108,47 @@ export default function Checkout() {
         })),
       };
 
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const token = (user && user.token) || localStorage.getItem("token");
+      if (token) headers["x-token"] = token;
+
       const res = await fetch(`${API_URL}/orders`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        headers,
+        body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail = (data && (data.detail as any[])) || null;
+        if (Array.isArray(detail) && detail.length) {
+          const msg = detail
+            .map(
+              (d) =>
+                `สินค้า ${d.productId ?? d.id}: ต้องการ ${d.need} มีคงเหลือ ${d.have}`
+            )
+            .join("\n");
+          throw new Error(`สต็อกไม่พอ:\n${msg}`);
+        }
+        throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+      }
 
-      // ✅ ได้รหัสคำสั่งซื้อจาก backend
-      const code = data.code as string;
+      // สำเร็จ
+      const code = (data && data.code) || genOrderCode();
       setOrderCode(code);
 
-      // เก็บประวัติไว้ดูในหน้า Orders
-      localStorage.setItem("lastOrder", JSON.stringify(data.order));
+      if (data?.order) {
+        localStorage.setItem("lastOrder", JSON.stringify(data.order));
+      }
+      nav(`/orders?code=${code}`, { replace: true });
+
+      // หักสต็อกจากแค็ตตาล็อกฝั่ง client ให้ทันที (ฝั่ง server ควรหักของจริงอยู่แล้ว)
+      deductStockFromCatalog(payload.items.map((it) => ({ id: it.id, qty: it.qty })));
 
       // เคลียร์ตะกร้า
       clearCart();
     } catch (e: any) {
-      alert(`เกิดข้อผิดพลาด: ${e.message || e}`);
+      alert(e?.message || "สั่งซื้อไม่สำเร็จ");
     } finally {
       setProcessing(false);
     }
@@ -110,10 +159,9 @@ export default function Checkout() {
   return (
     <div className="checkout-shell">
       <div className="checkout-card">
+        {/* back */}
         <div style={{ marginBottom: 12 }}>
-          <button className="back-btn" onClick={goShop}>
-            🔙 กลับไปหน้าร้านค้า
-          </button>
+          <button className="back-btn" onClick={goShop}>🔙 กลับไปหน้าร้านค้า</button>
         </div>
 
         <header className="checkout-header">
@@ -122,26 +170,24 @@ export default function Checkout() {
 
         {orderCode ? (
           <div className="paid-box">
-            <div className="paid-title">✅ ชำระเงินสำเร็จ</div>
+            <div className="paid-title">ชำระเงินสำเร็จ</div>
             <div className="paid-code">
               รหัสคำสั่งซื้อ: <b>{orderCode}</b>
               <button
                 className="copy-btn"
                 onClick={() => navigator.clipboard.writeText(orderCode)}
               >
-                คัดลอก
+                คัดลอกรหัส
               </button>
             </div>
-            <p>นำรหัสดังกล่าวไปแสดงเมื่อมารับสินค้าที่ร้าน</p>
+            <p>นำรหัสนี้ไปแสดงเมื่อมารับสินค้าที่หน้าร้าน</p>
             <div style={{ marginTop: 10 }}>
-              <button className="btn-primary" onClick={goShop}>
-                กลับไปหน้าร้านค้า
-              </button>
+              <button className="btn-primary" onClick={goShop}>กลับไปช้อปต่อ</button>
             </div>
           </div>
         ) : (
           <>
-            {/* รายการสินค้า */}
+            {/* สรุปรายการ */}
             <section className="co-summary">
               <h3>รายการสินค้า</h3>
               {agg.length === 0 ? (
@@ -157,7 +203,7 @@ export default function Checkout() {
                         <img src={it.image} alt={it.name} />
                       </div>
                       <div className="co-info">
-                        <div className="co-name">{it.name}</div>
+                        <div className="co-name" title={it.name}>{it.name}</div>
                         <div className="co-cat">{it.category}</div>
                       </div>
                       <div className="co-qty">x {it.qty}</div>
@@ -170,9 +216,7 @@ export default function Checkout() {
               )}
               <div className="co-total">
                 <div>ยอดรวม</div>
-                <div className="co-sum">
-                  {subtotal.toLocaleString()} <span>บาท</span>
-                </div>
+                <div className="co-sum">{subtotal.toLocaleString()} <span>บาท</span></div>
               </div>
             </section>
 
@@ -190,13 +234,14 @@ export default function Checkout() {
                   className={method === "PICKUP" ? "mtab active" : "mtab"}
                   onClick={() => setMethod("PICKUP")}
                 >
-                  ชำระเมื่อรับสินค้า
+                  ชำระเมื่อมารับของ
                 </button>
               </div>
 
               {method === "QR" ? (
                 <div className="qr-box">
                   <div className="qr-left">
+                    {/* ใช้ภาพตัวอย่าง วางไฟล์ใน public/images/qr-demo.png */}
                     <div className="qr-img">
                       <img src="/images/qr-demo.png" alt="QR สำหรับชำระเงิน" />
                     </div>
@@ -208,22 +253,18 @@ export default function Checkout() {
                     <ul className="qr-steps">
                       <li>เปิดแอปธนาคาร / พร้อมเพย์</li>
                       <li>สแกน QR ด้านซ้าย</li>
-                      <li>
-                        ตรวจสอบยอด <b>{subtotal.toLocaleString()}</b> บาท
-                      </li>
-                      <li>กดยืนยันการชำระ</li>
+                      <li>ตรวจสอบยอดให้ตรง: <b>{subtotal.toLocaleString()}</b> บาท</li>
+                      <li>กดยืนยันชำระ</li>
                     </ul>
-                    <div className="qr-warn">
-                      * QR นี้เป็นตัวอย่าง สำหรับทดสอบเท่านั้น
-                    </div>
+                    <div className="qr-warn">* ภาพ QR เป็นตัวอย่าง ในงานจริงให้สร้างแบบไดนามิกตามยอด</div>
                   </div>
                 </div>
               ) : (
                 <div className="pickup-box">
                   <p>
-                    เลือกชำระเงินที่หน้าร้าน ระบบจะออก{" "}
-                    <b>รหัสคำสั่งซื้อ</b> ให้ทันที
-                    กรุณาแสดงรหัสดังกล่าวเมื่อมารับสินค้า
+                    เลือกชำระเงินที่หน้าร้าน:
+                    ระบบจะออก <b>รหัสคำสั่งซื้อ</b> ให้ทันที
+                    กรุณาแสดงรหัสดังกล่าวเมื่อมารับสินค้าและชำระเงินที่เคาน์เตอร์
                   </p>
                 </div>
               )}
@@ -236,11 +277,7 @@ export default function Checkout() {
                 onClick={confirmPayment}
                 disabled={processing || agg.length === 0}
               >
-                {processing
-                  ? "กำลังดำเนินการ..."
-                  : method === "QR"
-                  ? "ยืนยันการชำระเงิน"
-                  : "ยืนยันการสั่งซื้อ"}
+                {processing ? "กำลังดำเนินการ..." : method === "QR" ? "ยืนยันการชำระ" : "ยืนยันการสั่งซื้อ"}
               </button>
             </div>
           </>

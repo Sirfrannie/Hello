@@ -2,7 +2,6 @@ import React, { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import "../App.css";
 
-
 const API_URL =
   process.env.REACT_APP_API_URL?.replace(/\/+$/, "") || "http://localhost:3001";
 
@@ -29,12 +28,8 @@ export default function Register() {
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0] || null;
     setFile(f);
-    if (f) {
-      const url = URL.createObjectURL(f);
-      setPreview(url);
-    } else {
-      setPreview(null);
-    }
+    if (f) setPreview(URL.createObjectURL(f));
+    else setPreview(null);
   };
 
   const validate = () => {
@@ -65,17 +60,30 @@ export default function Register() {
       fd.append("password",  password);
       if (file) fd.append("avatar", file);
 
-    const res = await fetch(`${API_URL}/auth/register`, { method: "POST", body: fd });
-    const result = await res.json();
-    localStorage.setItem("user", JSON.stringify(result.user)); 
+      const res = await fetch(`${API_URL}/auth/register`, { method: "POST", body: fd });
 
-    
-
+      // เช็กสถานะก่อน parse
+      const ct = res.headers.get("content-type") || "";
       if (!res.ok) {
+        // อ่านเป็น text เพื่อโชว์ข้อความ error จริง (กัน HTML → JSON error)
         const text = await res.text().catch(() => "");
-        throw new Error(text || `Register failed (${res.status})`);
+        // ถ้าเป็น HTML/404 บอก dev hint ชัด ๆ
+        if (!ct.includes("application/json")) {
+          throw new Error(
+            text
+              ? text.slice(0, 200)
+              : `Register failed (${res.status}). ตรวจสอบว่าเซิร์ฟเวอร์มี /auth/register และ CORS/พอร์ตถูกต้อง`
+          );
+        }
+        // ถ้าเป็น JSON แต่สถานะไม่ ok
+        let data: any = {};
+        try { data = JSON.parse(text || "{}"); } catch {}
+        throw new Error(data?.error || data?.message || `Register failed (${res.status})`);
       }
-      // สำเร็จ → กลับไปหน้า Login
+
+      // ok → ค่อย parse JSON 
+      const result = ct.includes("application/json") ? await res.json() : {};
+    
       alert("สมัครสมาชิกสำเร็จ! เข้าสู่ระบบได้เลย");
       nav("/login", { replace: true });
     } catch (e: any) {
@@ -107,9 +115,7 @@ export default function Register() {
         </div>
 
         <form className="reg-form" onSubmit={onSubmit}>
-          {err && (
-            <div className="reg-error">{err}</div>
-          )}
+          {err && <div className="reg-error">{err}</div>}
 
           <div className="reg-row">
             <label>

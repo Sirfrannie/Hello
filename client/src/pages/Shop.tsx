@@ -4,12 +4,15 @@ import { useNavigate } from "react-router-dom";
 
 const API_URL =
   process.env.REACT_APP_API_URL?.replace(/\/+$/, "") || "http://localhost:3001";
+
 type Product = {
   id: number;
   name: string;
   price: number;
   image: string;
   category: string;
+  stock?: number;
+  active?: boolean;
 };
 
 type Profile = {
@@ -17,17 +20,40 @@ type Profile = {
   avatar?: string | null;
 };
 
-const SAMPLE_PRODUCTS: Product[] = [
-  { id: 1, name: "พวงกุญแจตรามหาวิทยาลัย", price: 45, image: "/images/key-kmitl.jpg",  category: "ของที่ระลึก" },
-  { id: 2, name: "สติ๊กเกอร์ KMITL",           price: 30, image: "/images/sticker-kmitl.jpg", category: "ของที่ระลึก" },
-  { id: 3, name: "Casio FX-991EX",               price: 2150, image: "/images/casio-991ex.jpg",  category: "อุปกรณ์เรียน" },
-  { id: 4, name: "เสื้อคณะ Science 44",         price: 370, image: "/images/shirt-sci-44.jpg",  category: "เสื้อผ้า" },
-  { id: 5, name: "Casio FX-350MS",               price: 900, image: "/images/casio-350ms.jpg",   category: "อุปกรณ์เรียน" },
-  { id: 6, name: "หัวเข็มขัดตราครุฑ",            price: 40, image: "/images/buckle-thai.jpg",   category: "ของที่ระลึก" },
-];
-
 const CATEGORIES = ["ทั้งหมด", "ของที่ระลึก", "อุปกรณ์เรียน", "เสื้อผ้า"];
+const CATALOG_KEY = "catalog";
 
+function readCatalog(): Product[] {
+  try {
+    const raw = localStorage.getItem(CATALOG_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+// map รูปให้สินค้าที่มาจาก BE หากไม่มี image
+function withImageFallback(p: any): Product {
+  const name = String(p?.name || "").toLowerCase();
+  const byName: Record<string, string> = {
+    "พวงกุญแจตรามหาวิทยาลัย": "/images/key-kmitl.jpg",
+    "สติ๊กเกอร์ kmitl": "/images/sticker-kmitl.jpg",
+    "casio fx-991ex": "/images/casio-991ex.jpg",
+    "casio fx-350ms": "/images/casio-350ms.jpg",
+    "เสื้อคณะ science 44": "/images/shirt-sci-44.jpg",
+    "หัวเข็มขัดตราครุฑ": "/images/buckle-thai.jpg",
+  };
+  const picked = p?.image || byName[name] || "/images/default-product.jpg";
+  return {
+    id: Number(p?.id),
+    name: String(p?.name || ""),
+    price: Number(p?.price || 0),
+    image: picked,
+    category: String(p?.category || "ของที่ระลึก"),
+    stock: typeof p?.stock === "number" ? p.stock : undefined,
+    active: p?.active !== false,
+  };
+}
 
 export default function Shop() {
   // ===== profile from localStorage =====
@@ -44,8 +70,68 @@ export default function Shop() {
       const avatar = u.avatarUrl || "/images/default-avatar.jpg";
       setProfile({ name, avatar });
     } catch {
-      // ถ้า parse ไม่ได้ก็ไม่ต้องทำอะไร
+      // ignore
     }
+  }, []);
+
+  // ===== โหลดสินค้าจาก API =====
+  const [products, setProducts] = useState<Product[]>([]);
+
+  const fetchProducts = async () => {
+    try {
+      const res = await fetch(`${API_URL}/products?_t=${Date.now()}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `โหลดสินค้าไม่สำเร็จ (${res.status})`);
+      }
+      const list = await res.json();
+      const mapped: Product[] = Array.isArray(list)
+        ? list.map(withImageFallback).filter((p) => p.active !== false)
+        : [];
+      setProducts(mapped);
+      localStorage.setItem(CATALOG_KEY, JSON.stringify(mapped));
+    } catch (e) {
+      // fallback เป็น cache เดิม (หรือว่าง)
+      const local = readCatalog();
+      setProducts(Array.isArray(local) ? local : []);
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!alive) return;
+      await fetchProducts();
+    })();
+
+    // refetch เมื่อกลับมาโฟกัสแท็บนี้ / แท็บถูกแสดง
+    const onFocus = () => fetchProducts();
+    const onVis = () => {
+      if (document.visibilityState === "visible") fetchProducts();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVis);
+
+    // ถ้ามีแท็บแอดมิน sync localStorage.catalog → อัปเดตตามด้วย
+    const onStorage = (ev: StorageEvent) => {
+      if (ev.key === CATALOG_KEY && ev.newValue) {
+        try {
+          const arr = JSON.parse(ev.newValue);
+          if (Array.isArray(arr)) setProducts(arr);
+        } catch {}
+      }
+    };
+    window.addEventListener("storage", onStorage);
+
+    return () => {
+      alive = false;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   // ===== search & filter =====
@@ -54,15 +140,19 @@ export default function Shop() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return SAMPLE_PRODUCTS.filter((p) => {
+    return products.filter((p) => {
       const byCat = activeCat === "ทั้งหมด" || p.category === activeCat;
       const byQ = !q || p.name.toLowerCase().includes(q);
       return byCat && byQ;
     });
-  }, [query, activeCat]);
+  }, [query, activeCat, products]);
 
   // ===== actions =====
   const addToCart = (prod: Product) => {
+    if (typeof prod.stock === "number" && prod.stock <= 0) {
+      alert("สินค้าหมดสต็อก");
+      return;
+    }
     const raw = localStorage.getItem("cart");
     const cart: Product[] = raw ? JSON.parse(raw) : [];
     cart.push(prod);
