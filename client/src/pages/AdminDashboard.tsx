@@ -30,8 +30,6 @@ const CATALOG_KEY = "catalog";
 
 function saveCatalog(list: Product[]) {
   localStorage.setItem(CATALOG_KEY, JSON.stringify(list));
-  // กระตุ้นให้แท็บ Shop รีเฟรชเองผ่าน storage event
-  // (บางเบราว์เซอร์ไม่ยิง event ให้แท็บปัจจุบัน แต่แท็บอื่นจะได้รับ)
   try {
     const ev = new StorageEvent("storage", {
       key: CATALOG_KEY,
@@ -43,7 +41,6 @@ function saveCatalog(list: Product[]) {
 
 const token = () => {
   try {
-    // รองรับทั้งที่เก็บใน user.token และ key "token"
     const t1 = localStorage.getItem("token") || "";
     if (t1) return t1;
     const t2 = JSON.parse(localStorage.getItem("user") || "{}").token || "";
@@ -100,6 +97,14 @@ async function apiDelete(path: string) {
   return data;
 }
 
+/* ✅ รายการหมวดหมู่ให้เลือก */
+const CATEGORIES = [
+  "ของที่ระลึก",
+  "เสื้อผ้า",
+  "อุปกรณ์การเรียน",
+ 
+];
+
 export default function AdminDashboard() {
   const [tab, setTab] = useState<"stock" | "orders">("stock");
 
@@ -107,23 +112,20 @@ export default function AdminDashboard() {
   const [catalog, setCatalog] = useState<Product[]>([]);
   const [loadingCat, setLoadingCat] = useState(false);
 
-  // โหลดสินค้าจาก server (แทนที่จะใช้ localStorage ล้วนๆ)
   const loadProducts = async () => {
     setLoadingCat(true);
     try {
-      const list = await apiGet("/products"); // public แต่เราให้ no-cache
+      const list = await apiGet("/products");
       const arr: Product[] = Array.isArray(list) ? list : [];
       setCatalog(arr);
-      saveCatalog(arr); // sync ให้ Shop
+      saveCatalog(arr);
     } catch (e: any) {
       alert(e?.message || "โหลดสินค้าจากเซิร์ฟเวอร์ไม่สำเร็จ");
     } finally {
       setLoadingCat(false);
     }
   };
-  useEffect(() => {
-    loadProducts();
-  }, []);
+  useEffect(() => { loadProducts(); }, []);
 
   const [draft, setDraft] = useState<Partial<Product>>({});
   const addDisabled = useMemo(() => {
@@ -137,7 +139,6 @@ export default function AdminDashboard() {
     );
   }, [draft]);
 
-  // เพิ่มสินค้า → POST ไป server แล้วรีโหลด/อัปเดต state
   const addProduct = async () => {
     if (addDisabled) return;
     try {
@@ -159,30 +160,23 @@ export default function AdminDashboard() {
     }
   };
 
-  // ปรับสต็อก (client-side) + PATCH ไป server
   const updateStock = async (id: number, s: number) => {
     setCatalog((list) => list.map((p) => (p.id === id ? { ...p, stock: Math.max(0, s) } : p)));
     try {
       const updated = await apiPatch(`/products/${id}`, { stock: Math.max(0, s) });
-      const next = (prev: Product[]) =>
-        prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p));
-      setCatalog(next as any);
-      // sync
-      const cur = typeof next === "function" ? (next as any)(catalog) : (next as any);
-      saveCatalog(cur);
+      const next = catalog.map((p) => (p.id === updated.id ? { ...p, ...updated } : p));
+      setCatalog(next);
+      saveCatalog(next);
     } catch (e: any) {
       alert(e?.message || "อัปเดตสต็อกไม่สำเร็จ");
-      // rollback โดยเรียกโหลดใหม่
       loadProducts();
     }
   };
 
-  // เปิด/ปิด active → PATCH
   const toggleActive = async (id: number) => {
     const found = catalog.find((p) => p.id === id);
     if (!found) return;
     const want = !(found.active !== false);
-    // optimistic
     setCatalog((list) => list.map((p) => (p.id === id ? { ...p, active: !want } : p)));
     try {
       const updated = await apiPatch(`/products/${id}`, { active: !want });
@@ -195,7 +189,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // ลบสินค้า → DELETE
   const removeProduct = async (id: number) => {
     if (!confirm("ลบสินค้านี้ออกจากแค็ตตาล็อก?")) return;
     try {
@@ -216,7 +209,6 @@ export default function AdminDashboard() {
   async function loadOrders() {
     setLoadingOrders(true);
     try {
-      // ฝั่ง server: ถ้าเป็น admin และไม่ใส่ email → คืนทั้งหมด
       const data = await apiGet(`/orders`);
       let list: Order[] = Array.isArray(data?.orders) ? data.orders : [];
       if (filter) list = list.filter((o) => o.status === filter);
@@ -227,9 +219,7 @@ export default function AdminDashboard() {
       setLoadingOrders(false);
     }
   }
-  useEffect(() => {
-    if (tab === "orders") loadOrders();
-  }, [tab, filter]);
+  useEffect(() => { if (tab === "orders") loadOrders(); }, [tab, filter]);
 
   const setStatus = async (code: string, s: OrderStatus) => {
     try {
@@ -270,12 +260,49 @@ export default function AdminDashboard() {
             }}
           >
             <h3 style={{ marginTop: 0 }}>เพิ่มสินค้า</h3>
-            <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 120px 120px 1fr 1fr 120px" }}>
-              <input placeholder="ชื่อสินค้า" value={draft.name || ""} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-              <input placeholder="ราคา" type="number" value={draft.price ?? ""} onChange={(e) => setDraft({ ...draft, price: Number(e.target.value) })} />
-              <input placeholder="สต็อก" type="number" value={draft.stock ?? ""} onChange={(e) => setDraft({ ...draft, stock: Number(e.target.value) })} />
-              <input placeholder="หมวดหมู่ (เช่น ของที่ระลึก)" value={draft.category || ""} onChange={(e) => setDraft({ ...draft, category: e.target.value })} />
-              <input placeholder="ลิงก์รูป (ไม่ใส่ก็ได้)" value={draft.image || ""} onChange={(e) => setDraft({ ...draft, image: e.target.value })} />
+
+            {/* ✅ เปลี่ยนฟิลด์ "หมวดหมู่" ให้เป็น select */}
+            <div
+              style={{
+                display: "grid",
+                gap: 8,
+                gridTemplateColumns: "1fr 120px 120px 1fr 1fr 120px",
+              }}
+            >
+              <input
+                placeholder="ชื่อสินค้า"
+                value={draft.name || ""}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              />
+              <input
+                placeholder="ราคา"
+                type="number"
+                value={draft.price ?? ""}
+                onChange={(e) => setDraft({ ...draft, price: Number(e.target.value) })}
+              />
+              <input
+                placeholder="สต็อก"
+                type="number"
+                value={draft.stock ?? ""}
+                onChange={(e) => setDraft({ ...draft, stock: Number(e.target.value) })}
+              />
+
+              {/* จาก input → select */}
+              <select
+                value={draft.category || ""}
+                onChange={(e) => setDraft({ ...draft, category: e.target.value })}
+              >
+                <option value="" disabled>— เลือกหมวดหมู่ —</option>
+                {CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+
+              <input
+                placeholder="ลิงก์รูป (ไม่ใส่ก็ได้)"
+                value={draft.image || ""}
+                onChange={(e) => setDraft({ ...draft, image: e.target.value })}
+              />
               <button disabled={addDisabled} onClick={addProduct}>เพิ่ม</button>
             </div>
           </div>

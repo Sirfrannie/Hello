@@ -1,7 +1,7 @@
 :root {
-  --bg: #eed5a8;
-  --paper: #ffffff;
-  --ink: #0d0f14;
+  --bg: #e8b55f;
+  --paper: #ffffff; 
+  --ink: #0d0f14; 
   --muted: #777e87;
   --accent: #e59a62; /* ส้มฝั่งขวา */
   --accent-ink: #3d271b;
@@ -168,7 +168,8 @@ section h3 { font-weight: 700; }
   gap: 8px;
 }
 .reg-full { grid-column: 1 / -1; }
-.reg-form input {
+.reg-form input,
+.reg-form select {
   background: #fff;
   border: none;
   padding: 12px 14px;
@@ -489,11 +490,15 @@ section h3 { font-weight: 700; }
   box-shadow: 0 12px 0 rgba(0,0,0,.12);
   padding: 16px;
 }
+.checkout-card,
+.checkout-card * {
+  color: #1b1a00 !important;
+}
 
 .checkout-header { border-bottom: 3px dashed #e5c79c; padding-bottom: 8px; margin-bottom: 12px; }
 .checkout-header h1 { margin: 0; }
 
-.co-summary h3, .co-method h3 { margin: 10px 0; }
+.co-summary h3, .co-method h3 { margin: 10px 0;  }
 .co-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
 .co-row {
   display: grid;

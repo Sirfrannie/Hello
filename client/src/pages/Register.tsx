@@ -5,6 +5,18 @@ import "../App.css";
 const API_URL =
   process.env.REACT_APP_API_URL?.replace(/\/+$/, "") || "http://localhost:3001";
 
+// ✅ เพิ่มรายการสาขาไว้ด้านบน
+const MAJORS = [
+  "วิทยาการคอมพิวเตอร์",
+  "วิศวกรรมคอมพิวเตอร์",
+  "วิศวกรรมซอฟต์แวร์",
+  "เทคโนโลยีสารสนเทศ",
+  "วิทยาศาสตร์ข้อมูล",
+  "วิศวกรรมไฟฟ้า",
+  "วิศวกรรมอุตสาหการ",
+  "บริหารธุรกิจ/ระบบสารสนเทศ",
+];
+
 export default function Register() {
   const nav = useNavigate();
 
@@ -35,7 +47,7 @@ export default function Register() {
   const validate = () => {
     if (!firstName.trim()) return "กรุณากรอกชื่อ";
     if (!lastName.trim())  return "กรุณากรอกนามสกุล";
-    if (!major.trim())     return "กรุณากรอกสาขา";
+    if (!major.trim())     return "กรุณาเลือกสาขา";
     if (!year.trim())      return "กรุณากรอกชั้นปี";
     if (!email.trim())     return "กรุณากรอกอีเมล์";
     if (!password)         return "กรุณากรอกรหัสผ่าน";
@@ -62,12 +74,9 @@ export default function Register() {
 
       const res = await fetch(`${API_URL}/auth/register`, { method: "POST", body: fd });
 
-      // เช็กสถานะก่อน parse
       const ct = res.headers.get("content-type") || "";
       if (!res.ok) {
-        // อ่านเป็น text เพื่อโชว์ข้อความ error จริง (กัน HTML → JSON error)
         const text = await res.text().catch(() => "");
-        // ถ้าเป็น HTML/404 บอก dev hint ชัด ๆ
         if (!ct.includes("application/json")) {
           throw new Error(
             text
@@ -75,15 +84,12 @@ export default function Register() {
               : `Register failed (${res.status}). ตรวจสอบว่าเซิร์ฟเวอร์มี /auth/register และ CORS/พอร์ตถูกต้อง`
           );
         }
-        // ถ้าเป็น JSON แต่สถานะไม่ ok
         let data: any = {};
         try { data = JSON.parse(text || "{}"); } catch {}
         throw new Error(data?.error || data?.message || `Register failed (${res.status})`);
       }
 
-      // ok → ค่อย parse JSON 
       const result = ct.includes("application/json") ? await res.json() : {};
-    
       alert("สมัครสมาชิกสำเร็จ! เข้าสู่ระบบได้เลย");
       nav("/login", { replace: true });
     } catch (e: any) {
@@ -131,8 +137,15 @@ export default function Register() {
           <div className="reg-row">
             <label>
               <span>สาขา</span>
-              <input value={major} onChange={(e)=>setMajor(e.target.value)} />
+              {/* ✅ เปลี่ยนเป็น select dropdown */}
+              <select value={major} onChange={(e)=>setMajor(e.target.value)}>
+                <option value="" disabled>— เลือกสาขา —</option>
+                {MAJORS.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
             </label>
+
             <label>
               <span>ชั้นปี</span>
               <input value={year} onChange={(e)=>setYear(e.target.value)} />
